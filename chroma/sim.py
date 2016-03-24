@@ -3,7 +3,6 @@ import time
 import os
 import numpy as np
 
-from chroma import generator
 from chroma import gpu
 from chroma import event
 from chroma import itertoolset
@@ -17,8 +16,7 @@ def pick_seed():
     return int(time.time()) ^ (os.getpid() << 16)
 
 class Simulation(object):
-    def __init__(self, detector, seed=None, cuda_device=None,
-                 geant4_processes=4, nthreads_per_block=64, max_blocks=1024):
+    def __init__(self, detector, seed=None, cuda_device=None, nthreads_per_block=64, max_blocks=1024):
         self.detector = detector
 
         self.nthreads_per_block = nthreads_per_block
@@ -29,14 +27,9 @@ class Simulation(object):
         else:
             self.seed = seed
 
-        # We have three generators to seed: numpy.random, GEANT4, and CURAND.
+        # We have two generators to seed: numpy.random, and CURAND.
         # The latter two are done below.
         np.random.seed(self.seed)
-
-        if geant4_processes > 0:
-            self.photon_generator = generator.photon.G4ParallelGenerator(geant4_processes, detector.detector_material, base_seed=self.seed)
-        else:
-            self.photon_generator = None
 
         self.context = gpu.create_cuda_context(cuda_device)
 
@@ -52,50 +45,37 @@ class Simulation(object):
 
         self.pdf_config = None
 
-    def simulate(self, iterable, keep_photons_beg=False,
-                 keep_photons_end=False, keep_hits=True, run_daq=False, max_steps=100):
-        if isinstance(iterable, event.Photons):
-            first_element, iterable = iterable, [iterable]
-        else:
-            first_element, iterable = itertoolset.peek(iterable)
+    def simulate(self, photons, keep_photons_beg=False, keep_photons_end=False, 
+                 keep_hits=True, run_daq=False, max_steps=100):
+        ev = event.Event(photons_beg=photons)
         
+        gpu_photons = gpu.GPUPhotons(ev.photons_beg)
 
-        if isinstance(first_element, event.Event):
-            iterable = self.photon_generator.generate_events(iterable)
-        elif isinstance(first_element, event.Photons):
-            iterable = (event.Event(photons_beg=x) for x in iterable)
-        elif isinstance(first_element, event.Vertex):
-            iterable = (event.Event(vertices=[vertex]) for vertex in iterable)
-            iterable = self.photon_generator.generate_events(iterable)
+        gpu_photons.propagate(self.gpu_geometry, self.rng_states,
+                              nthreads_per_block=self.nthreads_per_block,
+                              max_blocks=self.max_blocks,
+                              max_steps=max_steps)
 
-        for ev in iterable:
-            gpu_photons = gpu.GPUPhotons(ev.photons_beg)
+        ev.nphotons = len(ev.photons_beg.pos)
 
-            gpu_photons.propagate(self.gpu_geometry, self.rng_states,
-                                  nthreads_per_block=self.nthreads_per_block,
-                                  max_blocks=self.max_blocks,
-                                  max_steps=max_steps)
+        if not keep_photons_beg:
+            ev.photons_beg = None
 
-            ev.nphotons = len(ev.photons_beg.pos)
-
-            if not keep_photons_beg:
-                ev.photons_beg = None
-
-            if keep_photons_end:
-                ev.photons_end = gpu_photons.get()
+        if keep_photons_end:
+            ev.photons_end = gpu_photons.get()
+        
+        if hasattr(self.detector, 'num_channels') and keep_hits:
+            ev.hits = gpu_photons.get_hits(self.gpu_geometry)
             
-            if hasattr(self.detector, 'num_channels') and keep_hits:
-                ev.hits = gpu_photons.get_hits(self.gpu_geometry)
-                
-            # Skip running DAQ if we don't have one
-            # Disabled by default because incredibly special-case
-            if hasattr(self, 'gpu_daq') and run_daq:
-                self.gpu_daq.begin_acquire()
-                self.gpu_daq.acquire(gpu_photons, self.rng_states, nthreads_per_block=self.nthreads_per_block, max_blocks=self.max_blocks)
-                gpu_channels = self.gpu_daq.end_acquire()
-                ev.channels = gpu_channels.get()
+        # Skip running DAQ if we don't have one
+        # Disabled by default because incredibly special-case
+        if hasattr(self, 'gpu_daq') and run_daq:
+            self.gpu_daq.begin_acquire()
+            self.gpu_daq.acquire(gpu_photons, self.rng_states, nthreads_per_block=self.nthreads_per_block, max_blocks=self.max_blocks)
+            gpu_channels = self.gpu_daq.end_acquire()
+            ev.channels = gpu_channels.get()
 
-            yield ev
+        return ev
 
     def create_pdf(self, iterable, tbins, trange, qbins, qrange, nreps=1):
         """Returns tuple: 1D array of channel hit counts, 3D array of

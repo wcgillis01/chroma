@@ -2,15 +2,8 @@ from setuptools import setup, find_packages, Extension
 import subprocess
 import os
 
-libraries = ['boost_python']
+libraries = []
 extra_objects = []
-
-if 'VIRTUAL_ENV' in os.environ:
-    boost_lib = os.path.join(os.environ['VIRTUAL_ENV'],'lib','libboost_python.so')
-    if os.path.exists(boost_lib):
-        # use local copy of boost
-        extra_objects.append(boost_lib)
-        libraries.remove('boost_python')
 
 def check_output(*popenargs, **kwargs):
     if 'stdout' in kwargs:
@@ -25,28 +18,6 @@ def check_output(*popenargs, **kwargs):
         raise subprocess.CalledProcessError(retcode, cmd, output=output)
     return output
 
-geant4_cflags = check_output(['geant4-config','--cflags']).split()
-geant4_libs = check_output(['geant4-config','--libs']).split()
-# For GEANT4.9.4 built without cmake
-try:
-    clhep_libs = check_output(['clhep-config','--libs']).split()
-except OSError:
-    clhep_libs = []
-
-
-include_dirs=['src']
-
-##### figure out location of pyublas headers
-try:
-    from imp import find_module
-    file, pathname, descr = find_module("pyublas")
-    from os.path import join
-    include_dirs.append(join(pathname, "include"))
-except:
-    pass  # Don't throw exceptions if prereqs not installed yet
-
-#####
-
 if 'VIRTUAL_ENV' in os.environ:
     include_dirs.append(os.path.join(os.environ['VIRTUAL_ENV'], 'include'))
 try:
@@ -57,32 +28,10 @@ except:
 
 setup(
     name = 'Chroma',
-    version = '0.5',
+    version = '0.6',
     packages = find_packages(),
     include_package_data=True,
-
-    scripts = ['bin/chroma-sim', 'bin/chroma-cam',
-               'bin/chroma-geo', 'bin/chroma-bvh',
-               'bin/chroma-server'],
-    ext_modules = [
-        Extension('chroma.generator._g4chroma',
-                  ['src/G4chroma.cc','src/GLG4Scint.cc'],
-                  include_dirs=include_dirs,
-                  extra_compile_args=['--std=c++11']+geant4_cflags,
-                  extra_link_args=geant4_libs+clhep_libs,
-                  extra_objects=extra_objects,
-                  libraries=libraries,
-                  ),
-        Extension('chroma.generator.mute',
-                  ['src/mute.cc'],
-                  include_dirs=include_dirs,
-                  extra_compile_args=geant4_cflags,
-                  extra_link_args=geant4_libs+clhep_libs,
-                  extra_objects=extra_objects,
-                  libraries=libraries),
-        ],
- 
-    setup_requires = ['pyublas'],
+    setup_requires = [],
     install_requires = ['uncertainties','pyzmq-static','spnav', 'pycuda', 
                         'numpy>=1.6', 'pygame', 'nose', 'sphinx'],
     #test_suite = 'nose.collector',

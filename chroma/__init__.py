@@ -4,8 +4,6 @@ except ImportError:
     pass # Allow chroma usage when pygame not present
 from chroma import geometry
 from chroma import event
-from chroma import generator
-from chroma.generator import constant_particle_gun
 from chroma import gpu
 from chroma import itertoolset
 from chroma import likelihood
