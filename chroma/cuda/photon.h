@@ -728,6 +728,42 @@ propagate_dielectric_metal(Photon &p, State &s, curandState &rng, Surface* surfa
     }
 } // propagate_dielectric_metal
 
+__noinline__ __device__ int
+propagate_at_sipmEmpirical(Photon &p, State &s, curandState &rng, Surface *surface, bool use_weights=false)
+{
+    float incident_angle = get_theta(s.surface_normal, -p.direction);
+    
+    const SiPMEmpiricalProps *props = surface->sipmEmpirical_props;
+    float idx = interp_idx(incident_angle,props->nangles,props->angles);
+
+    unsigned int iidx = (int)idx;
+    
+    float reflect_prob_low = interp_property(surface, p.wavelength, props->sipmEmpirical_reflect[iidx]);
+    float reflect_prob_high = interp_property(surface, p.wavelength, props->sipmEmpirical_reflect[iidx+1]);
+    float relativePDE_prob_low = interp_property(surface, p.wavelength, props->sipmEmpirical_relativePDE[iidx]);
+    float relativePDE_prob_high = interp_property(surface, p.wavelength, props->sipmEmpirical_relativePDE[iidx+1]);
+    
+    float reflect_prob = reflect_prob_low + (reflect_prob_high-reflect_prob_low)*(idx-iidx);
+    float relativePDE_prob = relativePDE_prob_low + (relativePDE_prob_high-relativePDE_prob_low)*(idx-iidx);
+    
+    float uniform_sample = curand_uniform(&rng);
+    if ((uniform_sample < reflect_prob)) {
+        return propagate_at_specular_reflector(p, s);
+    }
+    else {
+        // absorb
+        // detection probability is conditional on absorption here
+        float uniform_sample_detect = curand_uniform(&rng);
+        if (uniform_sample_detect < relativePDE_prob)
+            p.history |= SURFACE_DETECT;
+        else
+            p.history |= SURFACE_ABSORB;
+
+        return BREAK;
+    }
+
+} // propagate_at_sipmEmpirical
+
 __device__ int
 propagate_at_surface(Photon &p, State &s, curandState &rng, Geometry *geometry,
                      bool use_weights=false)
@@ -742,6 +778,8 @@ propagate_at_surface(Photon &p, State &s, curandState &rng, Geometry *geometry,
         return propagate_at_dichroic(p, s, rng, surface, use_weights);
     else if (surface->model == SURFACE_DIELECTRIC_METAL)
         return propagate_dielectric_metal(p, s, rng, surface, use_weights);
+    else if (surface->model == SURFACE_SIPM_EMPIRICAL)
+        return propagate_at_sipmEmpirical(p, s, rng, surface, use_weights);
     else {
         // use default surface model: do a combination of specular and
         // diffuse reflection, detection, and absorption based on relative
