@@ -655,7 +655,7 @@ propagate_dielectric_metal(Photon &p, State &s, curandState &rng, Surface* surfa
     float cos_t1 = dot(p.direction, s.surface_normal);
     if (cos_t1 < 0.0f)
         cos_t1 = -cos_t1;
-    float sin2_t1 = 1.0f - cos_t1 * cos_t1
+    float sin2_t1 = 1.0f - cos_t1 * cos_t1;
 
     // n2 cos_t2 = u2 + i * v2
     float eta22_k22 = n2_eta * n2_eta - n2_k * n2_k;
