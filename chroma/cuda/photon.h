@@ -365,15 +365,20 @@ propagate_at_boundary(Photon &p, State &s, curandState &rng)
 __device__ int
 propagate_at_specular_reflector(Photon &p, State &s)
 {
-    float incident_angle = get_theta(s.surface_normal, -p.direction);
-    float3 incident_plane_normal = cross(p.direction, s.surface_normal);
-    incident_plane_normal /= norm(incident_plane_normal);
-
-    p.direction = rotate(s.surface_normal, incident_angle, incident_plane_normal);
-
+    float3 p_projection = s.surface_normal * (dot(s.surface_normal, p.direction));
+    p.direction = p.direction - 2.0f * p_projection;
     p.history |= REFLECT_SPECULAR;
 
     return CONTINUE;
+    // float incident_angle = get_theta(s.surface_normal, -p.direction);
+    // float3 incident_plane_normal = cross(p.direction, s.surface_normal);
+    // incident_plane_normal /= norm(incident_plane_normal);
+
+    // p.direction = rotate(s.surface_normal, incident_angle, incident_plane_normal);
+
+    // p.history |= REFLECT_SPECULAR;
+
+    // return CONTINUE;
 } // propagate_at_specular_reflector
 
 __device__ int
