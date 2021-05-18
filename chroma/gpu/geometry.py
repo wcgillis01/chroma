@@ -167,9 +167,9 @@ class GPUGeometry(object):
                 self.surface_data.append(angles_gpu)
                 for i, angle in enumerate(props.angles):
                     sipmEmpirical_reflect = interp_material_property(wavelengths, props.sipmEmpirical_reflect[i])
-                    sipmEmpirical_reflect_gpu = ga.to_gpu(sipmEmpriical_reflect)
+                    sipmEmpirical_reflect_gpu = ga.to_gpu(sipmEmpirical_reflect)
                     self.surface_data.append(sipmEmpirical_reflect_gpu)
-                    reflect_pointers.append(sipmEmpriical_reflect_gpu)
+                    reflect_pointers.append(sipmEmpirical_reflect_gpu)
 
                     sipmEmpirical_relativePDE = interp_material_property(wavelengths, props.sipmEmpirical_relativePDE[i])
                     sipmEmpirical_relativePDE_gpu = ga.to_gpu(sipmEmpirical_relativePDE)
