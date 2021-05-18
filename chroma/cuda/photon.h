@@ -731,7 +731,13 @@ propagate_dielectric_metal(Photon &p, State &s, curandState &rng, Surface* surfa
 __noinline__ __device__ int
 propagate_at_sipmEmpirical(Photon &p, State &s, curandState &rng, Surface *surface, bool use_weights=false)
 {
-    float incident_angle = get_theta(s.surface_normal, -p.direction);
+    float cos_t1 = dot(s.surface_normal,-p.direction);
+    float incident_angle;
+    if (fabsf(cos_t1) < 1.0f-1e-6f) {
+        incident_angle = acosf(cos_t1);
+    } else {
+        incident_angle = 0.0f;
+    }
     
     const SiPMEmpiricalProps *props = surface->sipmEmpirical_props;
     float idx = interp_idx(incident_angle,props->nangles,props->angles);
